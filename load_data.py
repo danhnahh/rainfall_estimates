@@ -48,30 +48,60 @@ def read_tif_folder(folder_path, limit=None):
 def load_data(path):
     datas = []
     results2 = read_tif_folder(path)  # đọc tất cả các dữ liệu
-    datas = group_data_by_date(results2) # nhóm dữ liệu cùng ngày // trong 1 ngày gồm các dict theo giờ
+    datas = group_data_by_date(results2)  # nhóm dữ liệu cùng ngày // trong 1 ngày gồm các dict theo giờ
 
     return datas
 
 
+import os
+import re
+from collections import defaultdict
+
+
 def group_data_by_date(dict_list):
     """
-    Nhóm các dict có cùng ngày (dựa vào phần 'B04B_YYYYMMDD' trong tên file)
+    Nhóm các dict có cùng ngày (YYYYMMDD) dựa vào tên file.
+
     Params:
-        dict_list: list các dict, mỗi dict phải có key 'file'
+        dict_list: list các dict, mỗi dict phải có key 'file' chứa đường dẫn file.
     Returns:
-        list các list dict, mỗi list chứa các dict cùng ngày
+        list các list dict, mỗi list chứa các dict cùng ngày.
     """
+    # Khởi tạo defaultdict để nhóm dữ liệu, khóa là ngày tháng YYYYMMDD
     groups = defaultdict(list)
 
+    # Biểu thức chính quy tìm kiếm 8 chữ số liên tiếp (YYYYMMDD)
+    # Đây là mẫu ngày tháng phổ biến trong các tên file dữ liệu vệ tinh
+    DATE_PATTERN = re.compile(r'(\d{8})')
+
     for d in dict_list:
-        # Lấy tên file cuối cùng trong đường dẫn
-        filename = os.path.basename(d['file'])
-        # Lấy phần trước dấu chấm, ví dụ: 'B04B_20190401'
-        date_key = filename.split('.')[0]
-        # Thêm dict vào nhóm tương ứng
+        # lấy giá trị của khóa 'file' trong dictionary
+        filepath = d.get('file', '')
+        if not filepath:
+            continue  # Bỏ qua nếu không có key 'file' hoặc giá trị rỗng
+
+        # Lấy tên file cuối cùng trong đường dẫn (ví dụ: WVB_20201026.Z0200_TB.tif)
+        filename = os.path.basename(filepath)
+
+        # Tìm kiếm ngày tháng trong tên file
+        match = DATE_PATTERN.search(filename)
+
+        # 1. Trích xuất khóa ngày tháng (YYYYMMDD)
+        if match:
+            # Lấy chuỗi 8 chữ số được tìm thấy (ví dụ: '20201026')
+            date_key = match.group(1)
+        else:
+            # Nếu không tìm thấy ngày tháng, gán một khóa riêng biệt (ví dụ: 'UNKNOWN')
+            date_key = "UNKNOWN_DATE"
+
+            # 2. Thêm dict vào nhóm tương ứng
         groups[date_key].append(d)
 
-    # Trả về danh sách các nhóm
+    # 3. Loại bỏ nhóm 'UNKNOWN_DATE' nếu bạn chỉ muốn các nhóm có ngày
+    if "UNKNOWN_DATE" in groups:
+        del groups["UNKNOWN_DATE"]
+
+    # Trả về danh sách các list dict (mỗi list là một nhóm)
     return list(groups.values())
 
 
@@ -81,7 +111,11 @@ def test():
     # ############################
     # # tất cả dữ liệu trong hima chưa gom nhóm
     #
-    # results = read_tif_folder(HIMA_B04B_PATH)
+    start_time = time.time()
+    # results = read_tif_folder(BASE_PATH)
+    results = read_tif_folder(HIMA_PATH)
+    end_time = time.time()
+
     # # results2 = read_tif_folder(HIMA_B05B_PATH, limit=3)
     # # i = 0
     # # for r in results:
@@ -89,19 +123,30 @@ def test():
     # #     print(i, '. ', r)
     # ###########################
     #
-    # data_date = group_data_by_date(results)
-    #
+
+    data_date = group_data_by_date(results)
+
     # dem = 0
     # for r in data_date:
     #     for k in r:
     #         print(k['file'])
     #         dem += 1
-    #     print('số lần chụp trong 1 ngày: ', dem)
+    #     print('số lần chụp trong 1 ngày: ', dem/14)
     #     print('------------------------------')
     #     dem = 0
-    # # print(data_date)
+    #
+    # print(f'thời gian chạy của hàm read_tif_folder : {(end_time - start_time):.4f} giây')
 
-    print(load_data(HIMA_PATH))
+    for r in data_date:
+        for k in r:
+        #     print(k['file'])
+        # print('---------------------\n')
+            print(k)
+        print('---------------------\n')
+
+    # print(data_date)
+
+    # print(load_data(HIMA_PATH))
 
 
 test()
