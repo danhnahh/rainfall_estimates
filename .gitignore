@@ -1,3 +1,5 @@
 DATA/*
 !DATA/.gitkeep
 
+.idea/
+__pycache__
