@@ -1,152 +1,61 @@
-import os
-import rasterio
-from config import BASE_PATH, HIMA_PATH, HIMA_B04B_PATH, HIMA_B05B_PATH
-import time
-from collections import defaultdict
+import glob
+import pandas as pd
+import numpy as np
 
-
-def read_tif_folder(folder_path, limit=None):
+def load_data(path, keep_timestamps=None):
     """
-    Đọc toàn bộ ảnh .tif trong folder (kể cả thư mục con)
-    limit = số file tối đa muốn đọc (optional)
+    Nếu keep_timestamps không None → chỉ giữ các timestamp trong list đó.
     """
+    files = glob.glob(path)
+    dfs = [pd.read_csv(f, sep=",") for f in files]
+    df_all = pd.concat(dfs, ignore_index=True)
 
-    results = []
-    count = 0
+    # Lọc timestamp nếu cần
+    if keep_timestamps is not None:
+        df_all = df_all[df_all["timestamp"].isin(keep_timestamps)]
 
-    for root, dirs, files in os.walk(folder_path):
-        for file in files:
-            if file.lower().endswith(".tif"):
-                filepath = os.path.join(root, file)
+    # Lấy danh sách timestamp & variable theo thứ tự
+    unique_times = sorted(df_all["timestamp"].unique())
+    unique_vars = sorted(df_all["variable"].unique())
 
-                try:
-                    with rasterio.open(filepath) as src:
-                        data = src.read(1)
+    # Map timestamp và variable về chỉ số
+    time_to_index = {t: i for i, t in enumerate(unique_times)}
+    var_to_index = {v: i for i, v in enumerate(unique_vars)}
 
-                        info = {
-                            "file": filepath,  # Đường dẫn file ảnh
-                            "shape": data.shape,  # (H, W) - kích thước ảnh (height, width)
-                            "dtype": src.dtypes[0],  # Kiểu dữ liệu pixel: float32/int16...
-                            "bands": src.count,  # Số lượng band trong file (Himawari thường = 1)
-                            "crs": src.crs,  # Hệ tọa độ (Coordinate Reference System), thường là WGS84 (EPSG:4326)
-                            "res": src.res,  # Độ phân giải pixel (size theo độ), vd: (0.04°, 0.04°)
-                        }
+    # Max row/col
+    max_row = df_all["row"].max()
+    max_col = df_all["col"].max()
 
-                    results.append(info)
-                    count += 1
+    # Tạo array 4 chiều: time × variable × row × col
+    a = np.zeros((len(unique_times),
+                  len(unique_vars),
+                  max_row + 1,
+                  max_col + 1))
 
-                    if limit and count >= limit:
-                        return results
+    # Đổ dữ liệu
+    for _, r in df_all.iterrows():
+        t = time_to_index[r["timestamp"]]
+        v = var_to_index[r["variable"]]
+        a[t, v, r["row"], r["col"]] = r["value"]
 
-                except Exception as e:
-                    print(f"⚠️ Không đọc được file: {filepath}")
-                    print("Lỗi:", e)
-
-    return results
-
-
-def load_data(path):
-    datas = []
-    results2 = read_tif_folder(path)  # đọc tất cả các dữ liệu
-    datas = group_data_by_date(results2)  # nhóm dữ liệu cùng ngày // trong 1 ngày gồm các dict theo giờ
-
-    return datas
+    return np.array(a), unique_times
 
 
-import os
-import re
-from collections import defaultdict
+if __name__ == '__main__':
+    # Load y trước
+    y, y_times = load_data('csv_data/RADAR_hatinh.csv')
+    y_2019 = y[:, 0, :, :]
+    y_2020 = y[:, 1, :, :]
 
+    # Load x_IMERG_E, chỉ giữ các timestamp có trong y
+    x_IMERG_E, _ = load_data('csv_data/IMERG_E_hatinh.csv', keep_timestamps=y_times)
+    x_radar, _ = load_data('csv_data/RADAR_hatinh.csv', keep_timestamps=y_times)
+    x = np.concatenate([x_IMERG_E, x_radar], axis=1)
 
-def group_data_by_date(dict_list):
-    """
-    Nhóm các dict có cùng ngày (YYYYMMDD) dựa vào tên file.
+    # Nếu muốn kiểm tra đồng bộ
+    print("y timestamps:", y_times[:10])
 
-    Params:
-        dict_list: list các dict, mỗi dict phải có key 'file' chứa đường dẫn file.
-    Returns:
-        list các list dict, mỗi list chứa các dict cùng ngày.
-    """
-    # Khởi tạo defaultdict để nhóm dữ liệu, khóa là ngày tháng YYYYMMDD
-    groups = defaultdict(list)
+    # Giả sử x, y đã có
+    np.save("csv_data/y_hatinh.npy", y)
+    np.save("csv_data/x_hatinh.npy", x)
 
-    # Biểu thức chính quy tìm kiếm 8 chữ số liên tiếp (YYYYMMDD)
-    # Đây là mẫu ngày tháng phổ biến trong các tên file dữ liệu vệ tinh
-    DATE_PATTERN = re.compile(r'(\d{8})')
-
-    for d in dict_list:
-        # lấy giá trị của khóa 'file' trong dictionary
-        filepath = d.get('file', '')
-        if not filepath:
-            continue  # Bỏ qua nếu không có key 'file' hoặc giá trị rỗng
-
-        # Lấy tên file cuối cùng trong đường dẫn (ví dụ: WVB_20201026.Z0200_TB.tif)
-        filename = os.path.basename(filepath)
-
-        # Tìm kiếm ngày tháng trong tên file
-        match = DATE_PATTERN.search(filename)
-
-        # 1. Trích xuất khóa ngày tháng (YYYYMMDD)
-        if match:
-            # Lấy chuỗi 8 chữ số được tìm thấy (ví dụ: '20201026')
-            date_key = match.group(1)
-        else:
-            # Nếu không tìm thấy ngày tháng, gán một khóa riêng biệt (ví dụ: 'UNKNOWN')
-            date_key = "UNKNOWN_DATE"
-
-            # 2. Thêm dict vào nhóm tương ứng
-        groups[date_key].append(d)
-
-    # 3. Loại bỏ nhóm 'UNKNOWN_DATE' nếu bạn chỉ muốn các nhóm có ngày
-    if "UNKNOWN_DATE" in groups:
-        del groups["UNKNOWN_DATE"]
-
-    # Trả về danh sách các list dict (mỗi list là một nhóm)
-    return list(groups.values())
-
-
-def test():
-    # # Ví dụ: đọc thử 3 file đầu tiên trong BASE_PATH
-    #
-    # ############################
-    # # tất cả dữ liệu trong hima chưa gom nhóm
-    #
-    start_time = time.time()
-    # results = read_tif_folder(BASE_PATH)
-    results = read_tif_folder(HIMA_PATH)
-    end_time = time.time()
-
-    # # results2 = read_tif_folder(HIMA_B05B_PATH, limit=3)
-    # # i = 0
-    # # for r in results:
-    # #     i += 1
-    # #     print(i, '. ', r)
-    # ###########################
-    #
-
-    data_date = group_data_by_date(results)
-
-    # dem = 0
-    # for r in data_date:
-    #     for k in r:
-    #         print(k['file'])
-    #         dem += 1
-    #     print('số lần chụp trong 1 ngày: ', dem/14)
-    #     print('------------------------------')
-    #     dem = 0
-    #
-    # print(f'thời gian chạy của hàm read_tif_folder : {(end_time - start_time):.4f} giây')
-
-    for r in data_date:
-        for k in r:
-        #     print(k['file'])
-        # print('---------------------\n')
-            print(k)
-        print('---------------------\n')
-
-    # print(data_date)
-
-    # print(load_data(HIMA_PATH))
-
-
-test()
