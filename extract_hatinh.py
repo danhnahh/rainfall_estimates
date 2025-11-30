@@ -198,6 +198,17 @@ if __name__ == '__main__':
     else:
         print("\nKhông có pixel hợp lệ nào để ghi ra CSV.")
 
+
+# | Cột         | Ý nghĩa                                                                                   |
+# | ----------- | ----------------------------------------------------------------------------------------- |
+# | `variable`  | Tên biến (dựa trên thư mục cha của file raster). Ví dụ: `temperature`, `precipitation`…   |
+# | `timestamp` | Thời điểm của raster, được trích từ tên file bằng hàm `extract_datetime_from_filename()`. |
+# | `row`       | Chỉ số hàng (index row) trong mảng raster 2D `data`.                                      |
+# | `col`       | Chỉ số cột (index col) trong mảng raster 2D `data`.                                       |
+# | `lon`       | Kinh độ của pixel, tính từ transform của raster (`rasterio.transform.xy`).                |
+# | `lat`       | Vĩ độ của pixel, tính từ transform của raster.                                            |
+# | `value`     | Giá trị pixel tại vị trí `(row, col)` trong raster.                                       |
+
 # # Hàm extract pixel
 # def extract_HaTinh_pixels(path, root):
 #     try:
