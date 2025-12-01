@@ -3,3 +3,4 @@ DATA/*
 
 .idea/
 __pycache__
+test_best_model.pth
