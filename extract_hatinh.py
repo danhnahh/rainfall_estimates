@@ -114,12 +114,6 @@ def extract_HaTinh_pixels(path, root):
 
         # --- Lấy timestamp từ filename ---
         ts = extract_datetime_from_filename(path)
-        # filename = os.path.basename(path)
-        # ts = pd.NaT
-        # match = re.search(r'\d{14}', filename)
-        # if match:
-        #     datetime_str = match.group()
-        #     ts = pd.to_datetime(datetime_str, format='%Y%m%d%H%M%S', errors='coerce')
 
         # --- Variable ---
         rel_path = os.path.relpath(path, root)
@@ -157,9 +151,13 @@ def extract_HaTinh_pixels(path, root):
 if __name__ == '__main__':
 
     # --- Thư mục chứa dữ liệu GeoTIFF và output CSV ---
-    out_csv = 'csv_data/HIMA_hatinh.csv'
-    # out_csv = 'dungx/IM_hatinh.csv'
-    root = 'DATA_SV/Hima'
+    # out_csv = 'csv_data/HIMA_hatinh.csv'
+    # out_csv = 'csv_data/ERA5_hatinh.csv'
+    out_csv = 'csv_data/RADAR_hatinh.csv'
+
+    # root = 'DATA_SV/Hima'
+    # root = 'DATA_SV/ERA5'
+    root = 'DATA_SV/Precipitation/Radar'
 
     os.makedirs(os.path.dirname(out_csv), exist_ok=True)
 

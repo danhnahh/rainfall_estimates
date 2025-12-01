@@ -1,133 +1,87 @@
-import glob
 import pandas as pd
 import numpy as np
-from scripts.h2py import ignores
+from tqdm import tqdm
 
 
-def common_timestamps(list_of_lists):
+def create_x_y_from_csv(list_path):
     """
-    Trả về list các timestamp xuất hiện trong tất cả các list đầu vào.
-
-    Args:
-        list_of_lists: list các list, mỗi list chứa các timestamp
-
-    Returns:
-        list các timestamp xuất hiện trong tất cả các list, theo thứ tự sorted
+    Tạo tensor X và Y từ danh sách CSV
+    - Band '2019' hoặc '2020' → 'y' (target)
+    - Các band còn lại → X (input)
+    - Chỉ giữ timestamp đầy đủ band
+    - Row/Col tạo hình chữ nhật từ min → max
     """
-    if not list_of_lists:
-        return []
-    common_set = set(list_of_lists[0])  # Chuyển list đầu tiên thành set làm cơ sở
-    for lst in list_of_lists[1:]:  # Lấy giao với các list tiếp theo
-        common_set &= set(lst)  # intersection
-    return sorted(common_set)
+
+    # 1) Đọc CSV và gộp
+    dfs = []
+    print("[B1] Đọc CSV...")
+    for p in tqdm(list_path, desc="Đọc file CSV"):
+        df = pd.read_csv(p)
+        df["variable"] = df["variable"].astype(str)
+        df.loc[df["variable"].isin(['2019','2020']), "variable"] = 'y'
+        dfs.append(df)
+    df_all = pd.concat(dfs, ignore_index=True)
+
+    # 2) Lấy unique timestamp và band
+    all_timestamps = sorted(df_all["timestamp"].unique())
+    all_bands = sorted(df_all["variable"].unique())
+
+    # 3) Min/Max row/col → tạo hình chữ nhật
+    min_row, max_row = df_all["row"].min(), df_all["row"].max()
+    min_col, max_col = df_all["col"].min(), df_all["col"].max()
+    n_row = max_row - min_row + 1
+    n_col = max_col - min_col + 1
+
+    # 4) Chỉ giữ timestamp đầy đủ band
+    print("[B2] Lọc timestamp đầy đủ band...")
+    ts_valid = []
+    for t in tqdm(all_timestamps, desc="Kiểm tra timestamp"):
+        sub = df_all[df_all["timestamp"] == t]["variable"].unique()
+        if set(sub) == set(all_bands):
+            ts_valid.append(t)
+
+    # 5) Tạo tensor
+    tensor = np.zeros((len(ts_valid), len(all_bands), n_row, n_col), dtype=float)
+    t_to_idx = {t: i for i, t in enumerate(ts_valid)}
+    b_to_idx = {b: i for i, b in enumerate(all_bands)}
+
+    # 6) Tối ưu đổ dữ liệu bằng vectorization
+    print("[B3] Đổ dữ liệu vào Tensor...")
+    df_valid = df_all[df_all["timestamp"].isin(ts_valid)].copy()
+    df_valid["t_idx"] = df_valid["timestamp"].map(t_to_idx)
+    df_valid["b_idx"] = df_valid["variable"].map(b_to_idx)
+    df_valid["r_idx"] = df_valid["row"] - min_row
+    df_valid["c_idx"] = df_valid["col"] - min_col
+
+    # Sử dụng tqdm để hiển thị tiến độ theo chunks
+    for start in tqdm(range(0, len(df_valid), 10000), desc="Đổ dữ liệu (chunks)"):
+        chunk = df_valid.iloc[start:start+10000]
+        tensor[chunk["t_idx"].values,
+               chunk["b_idx"].values,
+               chunk["r_idx"].values,
+               chunk["c_idx"].values] = chunk["value"].values
+
+    # 7) Tách band 'y' ra làm target
+    y_idx = b_to_idx['y']
+    y = tensor[:, y_idx, :, :]          # shape = (timestamp, row, col)
+    x_indices = [i for i, b in enumerate(all_bands) if b != 'y']
+    x = tensor[:, x_indices, :, :]      # shape = (timestamp, band_except_y, row, col)
+
+    return x, y, ts_valid, [b for b in all_bands if b != 'y'], (min_row, max_row), (min_col, max_col)
 
 
-def create_tensor_form_csv(list_path):
-    list_df = []
-    for r in list_path:
-        df = pd.read_csv(r)
-        df["variable"] = df["variable"].astype(str)  # ép kiểu string
-        list_df.append(df)
+if __name__ == "__main__":
+    list_file = [
+        'csv_data/HIMA_hatinh.csv',
+        'csv_data/ERA5_hatinh.csv',
+        'csv_data/RADAR_hatinh.csv'
+    ]
 
-    list_timestamp_series = [df['timestamp'] for df in list_df]
+    x, y, timestamps, x_bands, row_range, col_range = create_x_y_from_csv(list_file)
 
-    timestamp = common_timestamps(list_timestamp_series)
+    print("X shape:", x.shape)
+    print("Y shape:", y.shape)
 
-    list_df = [df[df['timestamp'].isin(timestamp)] for df in list_df]
-    if len(list_path) > 1:
-        list_df = [df[~df['variable'].isin(['2019', '2020'])] for df in list_df]
-
-    # Lấy danh sách timestamp & variable theo thứ tự
-    unique_vars = sorted(pd.concat([df["variable"] for df in list_df]).unique())
-    unique_times = sorted(pd.concat([df["timestamp"] for df in list_df]).unique())
-
-    # Map timestamp và variable về chỉ số
-    time_to_index = {t: i for i, t in enumerate(unique_times)}
-    var_to_index = {v: i for i, v in enumerate(unique_vars)}
-
-    # Max row/col
-    all_rows = pd.concat([df['row'] for df in list_df])
-    all_cols = pd.concat([df['col'] for df in list_df])
-    min_row, max_row = all_rows.min(), all_rows.max()
-    min_col, max_col = all_cols.min(), all_cols.max()
-
-    # Tạo array 4 chiều: time × variable × row × col
-    a = np.zeros((len(unique_times),
-                  len(unique_vars),
-                  max_row - min_row + 1,
-                  max_col - min_col + 1))
-
-    # Đổ dữ liệu
-    for df in list_df:
-        for _, r in df.iterrows():
-            t = time_to_index[r["timestamp"]]
-            v = var_to_index[r["variable"]]
-            a[t, v, r["row"] - min_row, r["col"] - min_col] = r["value"]
-
-    return np.array(a)
-
-
-def test2():
-    create_tensor_form_csv()
-
-
-def test1():
-    # Load y trước
-    list_file = ['csv_data/HIMA_hatinh.csv',
-                 'csv_data/ERA5_hatinh.csv',
-                 'csv_data/RADAR_hatinh.csv']
-
-    y = create_tensor_form_csv(['csv_data/RADAR_hatinh.csv'])
-    y_2019 = y[:, 0, :, :]
-    y_2020 = y[:, 1, :, :]
-
-    x = create_tensor_form_csv(list_file)
-    # Giả sử x, y đã có
-    np.save("csv_data/y_hatinh.npy", y)
+    print("[B4] Lưu tensor...")
     np.save("csv_data/x_hatinh.npy", x)
-
-
-if __name__ == '__main__':
-    test1()
-    # test2()
-
-# def load_data(path, keep_timestamps=None):
-#     """
-#     Nếu keep_timestamps không None → chỉ giữ các timestamp trong list đó.
-#     """
-#     files = glob.glob(path)
-#     dfs = [pd.read_csv(f, sep=",") for f in files]
-#     df_all = pd.concat(dfs, ignore_index=True)
-#
-#     # Lọc timestamp nếu cần
-#     if keep_timestamps is not None:
-#         df_all = df_all[df_all["timestamp"].isin(keep_timestamps)]
-#
-#     # Lấy danh sách timestamp & variable theo thứ tự
-#     unique_times = sorted(df_all["timestamp"].unique())
-#     unique_vars = sorted(df_all["variable"].unique())
-#
-#     # Map timestamp và variable về chỉ số
-#     time_to_index = {t: i for i, t in enumerate(unique_times)}
-#     var_to_index = {v: i for i, v in enumerate(unique_vars)}
-#
-#     # Max row/col
-#     max_row = df_all["row"].max()
-#     max_col = df_all["col"].max()
-#
-#     min_row = df_all["row"].min()
-#     min_col = df_all["col"].min()
-#
-#     # Tạo array 4 chiều: time × variable × row × col
-#     a = np.zeros((len(unique_times),
-#                   len(unique_vars),
-#                   max_row - min_row + 1,
-#                   max_col - min_col + 1))
-#
-#     # Đổ dữ liệu
-#     for _, r in df_all.iterrows():
-#         t = time_to_index[r["timestamp"]]
-#         v = var_to_index[r["variable"]]
-#         a[t, v, r["row"] - min_row, r["col"] - min_col] = r["value"]
-#
-#     return np.array(a), unique_times
+    np.save("csv_data/y_hatinh.npy", y)
