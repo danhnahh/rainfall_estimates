@@ -34,10 +34,11 @@ def create_x_y_from_csv(list_path):
 
     # 4) Chỉ giữ timestamp đầy đủ band
     print("[B2] Lọc timestamp đầy đủ band...")
+    set_all_bands = set(all_bands)
     ts_valid = []
     for t in tqdm(all_timestamps, desc="Kiểm tra timestamp"):
         sub = df_all[df_all["timestamp"] == t]["variable"].unique()
-        if set(sub) == set(all_bands):
+        if set(sub) == set_all_bands:
             ts_valid.append(t)
 
     # 5) Tạo tensor
@@ -69,8 +70,7 @@ def create_x_y_from_csv(list_path):
 
     return x, y, ts_valid, [b for b in all_bands if b != 'y'], (min_row, max_row), (min_col, max_col)
 
-
-if __name__ == "__main__":
+def luuTensor():
     list_file = [
         'csv_data/HIMA_hatinh.csv',
         'csv_data/ERA5_hatinh.csv',
@@ -85,3 +85,11 @@ if __name__ == "__main__":
     print("[B4] Lưu tensor...")
     np.save("csv_data/x_hatinh.npy", x)
     np.save("csv_data/y_hatinh.npy", y)
+
+def test1():
+    xHaTinh = np.load("csv_data/x_hatinh.npy")
+    yHaTinh = np.load("csv_data/y_hatinh.npy")
+    print('X đầy đủ',xHaTinh.shape)
+    print('y đầy đủ',yHaTinh.shape)
+if __name__ == "__main__":
+    test1()

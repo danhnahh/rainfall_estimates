@@ -20,9 +20,6 @@ ht_gdf = vnm_gdf[vnm_gdf['VARNAME_1'] == 'Ha Tinh']
 ht_crs = ht_gdf.crs.to_string()
 ht_union = ht_gdf.geometry.union_all()  # union_all() thay cho unary_union
 
-
-#
-
 def extract_datetime_from_filename(path):
     filename = os.path.basename(path)
 
