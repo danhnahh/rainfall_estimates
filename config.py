@@ -16,3 +16,6 @@ HIMA_B05B_PATH = os.path.join(HIMA_PATH,"B05B")
 # os.makedirs(OUTPUT_PATH, exist_ok=True)
 
 ADM2_PATH = "rainfall_estimates/VNM_ADM2.shp"
+
+X_HATINH_PATH = 'csv_data/x_hatinh.npy'
+Y_HATINH_PATH = 'csv_data/y_hatinh.npy'
