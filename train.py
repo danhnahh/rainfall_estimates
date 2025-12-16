@@ -10,6 +10,7 @@ from utils import RainfallLoss, calculate_metrics
 from lr_schedule import MyScheduler
 
 
+
 class Trainer:
     def __init__(self, model, train_dataloader, val_dataloader=None,
                  criterion=None, optimizer=None, scheduler=None,
@@ -41,9 +42,18 @@ class Trainer:
     def get_loss(self, batch):
         """Tính loss cho một batch"""
         sat, met, target = batch
+        # DEBUG: In shape trước khi .to(device)
+        print(f"DEBUG - sat shape before .to: {sat.shape}")
+        print(f"DEBUG - met shape before .to: {met.shape}")
+        print(f"DEBUG - target shape before .to: {target.shape}")
+
         sat = sat.to(self.device)
         met = met.to(self.device)
         target = target.to(self.device)
+
+        # DEBUG: In shape sau khi .to(device)
+        print(f"DEBUG - sat shape after .to: {sat.shape}")
+        print(f"DEBUG - met shape after .to: {met.shape}")
 
         outputs = self.model(sat, met)
         loss = self.criterion(outputs, target)
@@ -199,57 +209,75 @@ class Trainer:
         self.model.train()
         return val_loss, all_metrics
 
-# if __name__ == "__main__":
-#     from model import CNN
-#     from utils import RainfallDataset
-#     from torch.utils.data import random_split
-#
-#     DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-#     GRADIENT_ACCUMULATION_STEPS = 4
-#     VAL_BATCH_SIZE = 32
-#     BATCH_SIZE = 8
-#     VAL_RATIO = 0.2
-#     EPOCHS = 10
-#     log_step = 50
-#     val_step = 200
-#     learning_rate = 1e-4
-#     weight_decay = 1e-5
-#     model_save_path = 'best_model.pth'
-#     SCHEDULER_TYPE = 'cosine'
-#     WARMUP_RATIO = 0.1
-#     GAMMA = 0.95
-#
-#     model = CNN()
-#     criterion = RainfallLoss()
-#     optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-#
-#     # Tính total updates cho scheduler
-#     total_updates = (len(train_dataset) + GRADIENT_ACCUMULATION_STEPS - 1) // GRADIENT_ACCUMULATION_STEPS * EPOCHS
-#     scheduler = MyScheduler(
-#         optimizer,
-#         total_steps=total_updates,
-#         scheduler_type=SCHEDULER_TYPE,
-#         warmup_ratio=WARMUP_RATIO,
-#         gamma=GAMMA
-#     )
-#
-#     # Khởi tạo trainer
-#     trainer = Trainer(
-#         model,
-#         train_dataloader=train_loader,
-#         val_dataloader=val_loader,
-#         criterion=criterion,
-#         optimizer=optimizer,
-#         scheduler=scheduler,
-#         device=DEVICE,
-#         log_step=log_step,
-#         val_step=val_step,
-#         model_save_path=model_save_path
-#     )
-#
-#     # Train model
-#     trained_model, history = trainer.train(
-#         num_epochs=EPOCHS,
-#         accumulate_steps=GRADIENT_ACCUMULATION_STEPS,
-#         save_by='rmse'  # Có thể chọn 'loss', 'rmse', hoặc 'mae'
-#     )
+if __name__ == "__main__":
+    from model import CNN
+    from utils import RainfallDataset
+    from torch.utils.data import random_split
+
+    DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+    GRADIENT_ACCUMULATION_STEPS = 4
+    VAL_BATCH_SIZE = 32
+    BATCH_SIZE = 8
+    VAL_RATIO = 0.2
+    EPOCHS = 10
+    log_step = 50
+    val_step = 200
+    learning_rate = 1e-4
+    weight_decay = 1e-5
+    model_save_path = 'best_model.pth'
+    SCHEDULER_TYPE = 'cosine'
+    WARMUP_RATIO = 0.1
+    GAMMA = 0.95
+
+    model = CNN()
+    criterion = RainfallLoss()
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+
+
+    dataset = RainfallDataset()
+
+    N = len(dataset)
+    train_size = int(N * (1 - VAL_RATIO))
+
+    # Index tách theo thứ tự không random
+    indices = list(range(N))
+
+    train_idx = indices[:train_size]
+    val_idx = indices[train_size:]
+
+    train_dataset = torch.utils.data.Subset(dataset, train_idx)
+    val_dataset = torch.utils.data.Subset(dataset, val_idx)
+
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+    # Tính total updates cho scheduler
+    total_updates = (len(train_dataset) + GRADIENT_ACCUMULATION_STEPS - 1) // GRADIENT_ACCUMULATION_STEPS * EPOCHS
+
+    scheduler = MyScheduler(
+        optimizer,
+        total_steps=total_updates,
+        scheduler_type=SCHEDULER_TYPE,
+        warmup_ratio=WARMUP_RATIO,
+        gamma=GAMMA
+    )
+
+    # Khởi tạo trainer
+    trainer = Trainer(
+        model,
+        train_dataloader=train_loader,
+        val_dataloader=val_loader,
+        criterion=criterion,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        device=DEVICE,
+        log_step=log_step,
+        val_step=val_step,
+        model_save_path=model_save_path
+    )
+
+    # Train model
+    trained_model, history = trainer.train(
+        num_epochs=EPOCHS,
+        accumulate_steps=GRADIENT_ACCUMULATION_STEPS,
+        save_by='rmse'  # Có thể chọn 'loss', 'rmse', hoặc 'mae'
+    )

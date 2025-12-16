@@ -4,31 +4,15 @@ Test script để kiểm tra Trainer class của bạn với dữ liệu giả
 import torch
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, random_split
-
+import numpy as np
 # Import code CỦA BẠN
 from model import CNN
 from utils import RainfallLoss
 from lr_schedule import MyScheduler
 from train import Trainer  # Import Trainer class của bạn
+from customdataset import RainfallDataset
 
 
-class DummyRainfallDataset(Dataset):
-    """Dataset giả để test"""
-
-    def __init__(self, num_samples=500, sat_channels=13, met_channels=8, img_size=64):
-        self.num_samples = num_samples
-        torch.manual_seed(42)
-
-        print(f"Creating dummy dataset with {num_samples} samples...")
-        self.sat_data = torch.randn(num_samples, sat_channels, img_size, img_size)
-        self.met_data = torch.randn(num_samples, met_channels, img_size, img_size)
-        self.targets = torch.rand(num_samples, 1, img_size, img_size) * 50  # 0-50mm
-
-    def __len__(self):
-        return self.num_samples
-
-    def __getitem__(self, idx):
-        return self.sat_data[idx], self.met_data[idx], self.targets[idx]
 
 
 def main():
@@ -65,8 +49,26 @@ def main():
     print("\n" + "=" * 70)
     print("STEP 1: Creating Dataset")
     print("=" * 70)
+    N, H, W = 100, 128, 128
 
-    dataset = DummyRainfallDataset(num_samples=500)
+    sat_data = np.random.rand(N, 13, H, W).astype(np.float32)  # ← Có đúng shape này không?
+    met_data = np.random.rand(N, 8, H, W).astype(np.float32)
+    rainfall_data = np.random.rand(N, H, W).astype(np.float32)
+
+    # THÊM DÒNG NÀY ĐỂ KIỂM TRA
+    print(f"sat_data shape: {sat_data.shape}")  # Phải là (100, 8, 128, 128)
+    print(f"met_data shape: {met_data.shape}")  # Phải là (100, 8, 128, 128)
+    print(f"rainfall_data shape: {rainfall_data.shape}")  # Phải là (100, 128, 128)
+
+    # Kiểm tra 1 sample
+    print(f"sat_data[0] shape: {sat_data[0].shape}")  # Phải là (8, 128, 128)
+    dataset = RainfallDataset(
+        sat_data=sat_data,
+        met_data=met_data,
+        rainfall_data=rainfall_data,
+        transform=None,
+        normalize=True
+    )
 
     # Split train/val
     val_size = int(VAL_RATIO * len(dataset))
@@ -183,7 +185,14 @@ def main():
 
 if __name__ == "__main__":
     success = main()
+    model = CNN()
 
+    # Tổng số tham số
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    print(f"Total parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
     if success:
         print("\n🎉 Your Trainer works perfectly with dummy data!")
         print("Now you can use it with real data.")
