@@ -15,7 +15,7 @@ from functools import partial
 # =========================================================
 # 1) LOAD SHAPEFILE HÀ TĨNH
 # =========================================================
-shp_path = "gadm41_VNM_shp"
+shp_path = "../gadm41_VNM_shp"
 vnm_gdf = gpd.read_file(shp_path)
 
 # Lọc Hà Tĩnh

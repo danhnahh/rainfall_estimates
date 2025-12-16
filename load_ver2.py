@@ -22,8 +22,21 @@ OUTPUT_X = "csv_data/tri_an_thanh_hoa/x_direct.npy"
 OUTPUT_Y = "csv_data/tri_an_thanh_hoa/y_direct.npy"
 
 # Features
-selected_features = ['B04B', 'B10B', 'B11B', 'B16B', 'IRB',
-                     'CAPE', 'R850', 'TCWV', 'U850', 'I2B', 'TCLW', 'TCW']
+# selected_features = ['CAPE', 'CIN', 'EWSS', 'IE', 'ISOR',
+#                      'PEV', 'R500', 'R850', 'SLHF', 'SLOR',
+#                      'SSHF', 'TCLW', 'TCW', 'U250', 'U850',
+#                      'V850', 'B05B', 'B09B', 'B10B', 'B12B',
+#                      'B14B', 'B16B', 'I2B', 'I4B', 'VSB']
+selected_features = [
+    "TCW", "I4B", "B04B", "R500", "VSB",
+    "R250", "V250", "WVB", "TCLW", "CIN",
+    "U250", "B05B", "B06B", "B09B", "V850",
+    "PEV", "U850", "KX", "R850", "CAPE"
+]
+
+
+# selected_features = ['B04B', 'B10B', 'B11B', 'B16B', 'IRB',
+# 'CAPE', 'R850', 'TCWV', 'U850', 'I2B', 'TCLW', 'TCW']
 
 
 # =========================================================
@@ -81,7 +94,6 @@ def clean_to_minus9999(arr, nodata_val):
     arr[np.isnan(arr)] = -9999.0
 
     return arr
-
 
 
 # =========================================================
@@ -281,7 +293,6 @@ def generate_numpy_dataset():
     os.makedirs(os.path.dirname(OUTPUT_X), exist_ok=True)
     np.save(OUTPUT_X, X_data)
     np.save(OUTPUT_Y, np.squeeze(Y_data, axis=1))  # Y thường để shape (T, H, W)
-
 
     print("✅ HOÀN TẤT! Dữ liệu đã được lưu.")
     print(f"   X path: {OUTPUT_X}")
